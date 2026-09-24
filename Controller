@@ -1,0 +1,74 @@
+using Microsoft.AspNetCore.Mvc;
+using Crud.Services;
+
+public class CuentaController : Controller
+{
+    private readonly SesionService _sesionService;
+
+    public CuentaController(SesionService sesionService)
+    {
+        _sesionService = sesionService;
+    }
+
+    // Ruta: /Cuenta/Login
+    // Simula un login: en tu caso real, aquí validarías
+    // usuario/contraseña contra tu base de datos.
+    public IActionResult Login()
+    {
+        var datos = new DatosSesion
+        {
+            Usuario = "juanperez",
+            Token = Guid.NewGuid().ToString() // o el token real que uses
+        };
+
+        // 1. Guardamos los datos en caché, asociados a un id único
+        string idSesion = _sesionService.CrearSesion(datos, TimeSpan.FromMinutes(30));
+
+        // 2. Escribimos ese id como cookie en el navegador del usuario
+        Response.Cookies.Append(_sesionService.NombreCookie, idSesion, new CookieOptions
+        {
+            HttpOnly = true,           // el JS del navegador no puede leerla (más seguro)
+            Secure = true,             // solo se envía por HTTPS
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddMinutes(30)
+        });
+
+        return Content("Sesión iniciada. Ahora navega a /Cuenta/Perfil");
+    }
+
+    // Ruta: /Cuenta/Perfil
+    // Lee la cookie del navegador y busca los datos en IMemoryCache
+    public IActionResult Perfil()
+    {
+        // Extraemos el valor de la cookie que el navegador envió
+        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
+
+        if (idSesion == null)
+        {
+            return Content("No hay cookie de sesión. Debes hacer login primero.");
+        }
+
+        var datos = _sesionService.ObtenerSesion(idSesion);
+
+        if (datos == null)
+        {
+            return Content("La sesión expiró o no existe.");
+        }
+
+        return Content($"Usuario logueado: {datos.Usuario} | Token: {datos.Token}");
+    }
+
+    // Ruta: /Cuenta/Logout
+    public IActionResult Logout()
+    {
+        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
+
+        if (idSesion != null)
+        {
+            _sesionService.CerrarSesion(idSesion);
+            Response.Cookies.Delete(_sesionService.NombreCookie);
+        }
+
+        return Content("Sesión cerrada.");
+    }
+}
