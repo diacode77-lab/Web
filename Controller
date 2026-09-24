@@ -1,74 +1,57 @@
-using Microsoft.AspNetCore.Mvc;
-using Crud.Services;
+namespace Crud.Services;
 
-public class CuentaController : Controller
+using Microsoft.Extensions.Caching.Memory;
+
+public class DatosSesion
 {
-    private readonly SesionService _sesionService;
+    public string Usuario { get; set; } = "";
+    public string Token { get; set; } = "";
+}
 
-    public CuentaController(SesionService sesionService)
+public class SesionService
+{
+    private readonly IMemoryCache _cache;
+    private const string NOMBRE_COOKIE = "sesion_id";
+
+    public SesionService(IMemoryCache cache)
     {
-        _sesionService = sesionService;
+        _cache = cache;
     }
 
-    // Ruta: /Cuenta/Login
-    // Simula un login: en tu caso real, aquí validarías
-    // usuario/contraseña contra tu base de datos.
-    public IActionResult Login()
+    /// <summary>
+    /// Crea una nueva sesión: genera un id único, lo guarda como
+    /// clave en IMemoryCache junto a los datos de sesión, y
+    /// devuelve el id para que el Controller lo escriba como cookie.
+    /// </summary>
+    public string CrearSesion(DatosSesion datos, TimeSpan duracion)
     {
-        var datos = new DatosSesion
-        {
-            Usuario = "juanperez",
-            Token = Guid.NewGuid().ToString() // o el token real que uses
-        };
+        string idSesion = Guid.NewGuid().ToString();
 
-        // 1. Guardamos los datos en caché, asociados a un id único
-        string idSesion = _sesionService.CrearSesion(datos, TimeSpan.FromMinutes(30));
+        _cache.Set(idSesion, datos, duracion);
 
-        // 2. Escribimos ese id como cookie en el navegador del usuario
-        Response.Cookies.Append(_sesionService.NombreCookie, idSesion, new CookieOptions
-        {
-            HttpOnly = true,           // el JS del navegador no puede leerla (más seguro)
-            Secure = true,             // solo se envía por HTTPS
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.AddMinutes(30)
-        });
-
-        return Content("Sesión iniciada. Ahora navega a /Cuenta/Perfil");
+        return idSesion;
     }
 
-    // Ruta: /Cuenta/Perfil
-    // Lee la cookie del navegador y busca los datos en IMemoryCache
-    public IActionResult Perfil()
+    /// <summary>
+    /// Busca los datos de sesión asociados a un id
+    /// (el valor que viene de la cookie del navegador).
+    /// </summary>
+    public DatosSesion? ObtenerSesion(string idSesion)
     {
-        // Extraemos el valor de la cookie que el navegador envió
-        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
-
-        if (idSesion == null)
+        if (_cache.TryGetValue(idSesion, out DatosSesion? datos))
         {
-            return Content("No hay cookie de sesión. Debes hacer login primero.");
+            return datos;
         }
-
-        var datos = _sesionService.ObtenerSesion(idSesion);
-
-        if (datos == null)
-        {
-            return Content("La sesión expiró o no existe.");
-        }
-
-        return Content($"Usuario logueado: {datos.Usuario} | Token: {datos.Token}");
+        return null;
     }
 
-    // Ruta: /Cuenta/Logout
-    public IActionResult Logout()
+    /// <summary>
+    /// Elimina la sesión (logout).
+    /// </summary>
+    public void CerrarSesion(string idSesion)
     {
-        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
-
-        if (idSesion != null)
-        {
-            _sesionService.CerrarSesion(idSesion);
-            Response.Cookies.Delete(_sesionService.NombreCookie);
-        }
-
-        return Content("Sesión cerrada.");
+        _cache.Remove(idSesion);
     }
+
+    public string NombreCookie => NOMBRE_COOKIE;
 }
