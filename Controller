@@ -1,68 +1,55 @@
-using Microsoft.AspNetCore.Mvc;
-using Crud.Services;
+namespace Crud.Services;
 
-public class CuentaController : Controller
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
+
+public class DatosSesion
 {
-    private readonly SesionService _sesionService;
+    public string Usuario { get; set; } = "";
+    public string Token { get; set; } = "";
+}
 
-    public CuentaController(SesionService sesionService)
+public class SesionService
+{
+    private readonly IDistributedCache _cache;
+    private const string NOMBRE_COOKIE = "sesion_id";
+
+    public SesionService(IDistributedCache cache)
     {
-        _sesionService = sesionService;
+        _cache = cache;
     }
 
-    // Ruta: /Cuenta/Login
-    public async Task<IActionResult> Login()
+    public async Task<string> CrearSesionAsync(DatosSesion datos, TimeSpan duracion)
     {
-        var datos = new DatosSesion
+        string idSesion = Guid.NewGuid().ToString();
+        string json = JsonSerializer.Serialize(datos);
+
+        var opciones = new DistributedCacheEntryOptions
         {
-            Usuario = "juanperez",
-            Token = Guid.NewGuid().ToString() // reemplaza por tu token real
+            AbsoluteExpirationRelativeToNow = duracion
         };
 
-        string idSesion = await _sesionService.CrearSesionAsync(datos, TimeSpan.FromMinutes(30));
+        await _cache.SetStringAsync(idSesion, json, opciones);
 
-        Response.Cookies.Append(_sesionService.NombreCookie, idSesion, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.AddMinutes(30)
-        });
-
-        return Content("Sesión iniciada. Ahora navega a /Cuenta/Perfil");
+        return idSesion;
     }
 
-    // Ruta: /Cuenta/Perfil
-    public async Task<IActionResult> Perfil()
+    public async Task<DatosSesion?> ObtenerSesionAsync(string idSesion)
     {
-        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
+        string? json = await _cache.GetStringAsync(idSesion);
 
-        if (idSesion == null)
+        if (json == null)
         {
-            return Content("No hay cookie de sesión. Debes hacer login primero.");
+            return null;
         }
 
-        var datos = await _sesionService.ObtenerSesionAsync(idSesion);
-
-        if (datos == null)
-        {
-            return Content("La sesión expiró o no existe.");
-        }
-
-        return Content($"Usuario logueado: {datos.Usuario} | Token: {datos.Token}");
+        return JsonSerializer.Deserialize<DatosSesion>(json);
     }
 
-    // Ruta: /Cuenta/Logout
-    public async Task<IActionResult> Logout()
+    public async Task CerrarSesionAsync(string idSesion)
     {
-        string? idSesion = Request.Cookies[_sesionService.NombreCookie];
-
-        if (idSesion != null)
-        {
-            await _sesionService.CerrarSesionAsync(idSesion);
-            Response.Cookies.Delete(_sesionService.NombreCookie);
-        }
-
-        return Content("Sesión cerrada.");
+        await _cache.RemoveAsync(idSesion);
     }
+
+    public string NombreCookie => NOMBRE_COOKIE;
 }
