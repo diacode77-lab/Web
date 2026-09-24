@@ -1,66 +1,13 @@
-namespace Crud.Services;
+// --- En Program.cs, antes de builder.Build() ---
 
-using Microsoft.Extensions.Caching.Distributed;
-using System.Text.Json;
-
-public class DatosSesion
+// Opción A: Redis (recomendado para producción)
+builder.Services.AddStackExchangeRedisCache(options =>
 {
-    public string Usuario { get; set; } = "";
-    public string Token { get; set; } = "";
-}
+    // Cadena de conexión a tu servidor Redis
+    // Local (ej. Docker): "localhost:6379"
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "MiApp_";
+});
 
-public class SesionService
-{
-    private readonly IDistributedCache _cache;
-    private const string NOMBRE_COOKIE = "sesion_id";
-
-    public SesionService(IDistributedCache cache)
-    {
-        _cache = cache;
-    }
-
-    /// <summary>
-    /// Crea una nueva sesión: genera un id único, serializa los
-    /// datos a JSON y los guarda en el caché distribuido (Redis).
-    /// </summary>
-    public async Task<string> CrearSesionAsync(DatosSesion datos, TimeSpan duracion)
-    {
-        string idSesion = Guid.NewGuid().ToString();
-
-        string json = JsonSerializer.Serialize(datos);
-
-        var opciones = new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = duracion
-        };
-
-        await _cache.SetStringAsync(idSesion, json, opciones);
-
-        return idSesion;
-    }
-
-    /// <summary>
-    /// Busca y deserializa los datos de sesión asociados a un id.
-    /// </summary>
-    public async Task<DatosSesion?> ObtenerSesionAsync(string idSesion)
-    {
-        string? json = await _cache.GetStringAsync(idSesion);
-
-        if (json == null)
-        {
-            return null;
-        }
-
-        return JsonSerializer.Deserialize<DatosSesion>(json);
-    }
-
-    /// <summary>
-    /// Elimina la sesión (logout).
-    /// </summary>
-    public async Task CerrarSesionAsync(string idSesion)
-    {
-        await _cache.RemoveAsync(idSesion);
-    }
-
-    public string NombreCookie => NOMBRE_COOKIE;
-}
+// Registras tu servicio como siempre
+builder.Services.AddScoped<SesionService>();
