@@ -1,34 +1,29 @@
-var builder = WebApplication.CreateBuilder(args);
+Mantenimiento de Sesión con HttpClient + CookieContainer (Enfoque Nativo y Ligero)
+Consiste en realizar la autenticación directamente desde tu código C# haciendo una petición POST al formulario de login del sitio externo. Las cookies devueltas en la respuesta se almacenan en un CookieContainer asociado a tu HttpClient.
+Cómo funciona:
+Tu backend en C# envía las credenciales (usuario/clave) al endpoint de login del sitio.
+El servidor externo responde con la cookie de autenticación (ej. ASP.NET_SessionId, .AspNetCore.Cookies, PHPSESSID).
+Reutilizas la misma instancia de HttpClient (o guardas las cookies en memoria/base de datos/Redis) para todas las consultas posteriores.
+Ventajas: Extremadamente rápido, ligero y consume muy pocos recursos. No requiere abrir ningún navegador.
 
-// --- Servicios MVC (ajusta según tu proyecto real) ---
-builder.Services.AddControllersWithViews();
 
-// --- Redis como IDistributedCache ---
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration.GetConnectionString("Redis");
-    options.InstanceName = "MiApp_";
-});
 
-// --- Tu servicio de sesión ---
-builder.Services.AddScoped<Crud.Services.SesionService>();
 
-var app = builder.Build();
 
-// --- Middleware (ajusta según tu proyecto real) ---
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
-}
 
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-app.UseRouting();
-app.UseAuthorization();
+Automatización de Navegador con Playwright para .NET (Enfoque Robusto)
+Utiliza una librería como Playwright (la herramienta moderna recomendada por Microsoft) o PuppeteerSharp para controlar un navegador en segundo plano (headless browser).
+Cómo funciona:
+La primera vez, la librería abre un navegador, llena el formulario de login y se autentica.
+Guarda el estado de la sesión (storageState.json), que incluye tanto las cookies como el localStorage y sessionStorage.
+Para cada consulta futura, la aplicación carga ese archivo de estado y realiza la navegación o extrae datos directamente sin tener que volver a iniciar sesión.
+Ventajas: Funciona en prácticamente cualquier sitio web (incluso en aplicaciones de una sola página hechas en React, Angular o Vue). Permite iniciar sesión manualmente la primera vez si hay CAPTCHA.
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
 
-app.Run();
+
+                                        Sincronización de Cookies desde tu Navegador Real (Chrome/Edge)
+Inicias sesión manualmente en tu navegador habitual (ej. Google Chrome) y tu aplicación en C# lee o recibe esas cookies de sesión para utilizarlas en sus consultas HTTP.
+Cómo funciona:
+Opción A (Extensión local): Creas o usas una pequeña extensión de navegador que expone/envía las cookies del sitio a tu API local en C#.
+Opción B (Lectura de SQLite): Tu aplicación en C# lee el archivo de cookies del perfil de Chrome/Edge en el disco local (desencriptándolas con DPAPI en Windows).
+Ventajas: Bypassea completamente CAPTCHAs y 2FA porque la autenticación la hace un humano en el navegador real.
